@@ -35,13 +35,13 @@
                 "type": "bitmap"
             },
             {
-                "file": "images/action_icon_minus.png",
-                "name": "IMAGES_ACTION_ICON_MINUS_PNG",
+                "file": "images/action_icon_plus.png",
+                "name": "IMAGES_ACTION_ICON_PLUS_PNG",
                 "type": "bitmap"
             },
             {
-                "file": "images/action_icon_plus.png",
-                "name": "IMAGES_ACTION_ICON_PLUS_PNG",
+                "file": "images/action_icon_minus.png",
+                "name": "IMAGES_ACTION_ICON_MINUS_PNG",
                 "type": "bitmap"
             }
         ]

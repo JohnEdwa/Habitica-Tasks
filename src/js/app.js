@@ -4,6 +4,8 @@
  *
  */
 
+var Vibe = require('ui/vibe');
+
 var UI = require('ui');
 var Settings = require('settings');
 var ajax = require('ajax');
@@ -17,6 +19,9 @@ var habiticaGetTasksUser = '/tasks/user';
 var habiticaGetUser = '/user';
 var habiticaPostTasksScore = '/tasks/:taskId/score/:direction';
 var habiticaPostTasksChecklistScore = '/tasks/:taskId/checklist/:itemId/score';
+var habiticaPostSkillCast = '/user/class/cast/:spellId';
+
+var menu, timeout;
 
 // Set a configurable
 Settings.config(
@@ -61,7 +66,7 @@ if (!checkHabiticaStatus) {
   // get user object
   var user = {};
   getUserObject();
-  
+	  
   // start menu
   var mainMenu = new UI.Menu({
     highlightBackgroundColor: Feature.color('indigo', 'black'),
@@ -77,8 +82,10 @@ if (!checkHabiticaStatus) {
     }, {
       title: 'User',
       items: [{
-        title: 'Stats'
-      }]
+        title: 'Skills'
+      }, {
+				title: 'Stats'
+			}]
     }]
   });
   
@@ -93,12 +100,13 @@ if (!checkHabiticaStatus) {
       cardNoTasks.show();
     } else {
       //console.log('Tasks available');
+			var menuAllTasks = new UI.Menu({
+      	highlightBackgroundColor: Feature.color('indigo', 'black')
+      });
       switch (e.sectionIndex) {
         case 0: { // tasks
           // create tasks menu
-          var menuAllTasks = new UI.Menu({
-            highlightBackgroundColor: Feature.color('indigo', 'black')
-          });
+          
           switch (e.itemIndex) {
             case 0: { // habits
               menuAllTasks = createTasksMenu('habit');
@@ -115,39 +123,35 @@ if (!checkHabiticaStatus) {
           }
           menuAllTasks.show();
           break;
-        }
+        }					
         case 1: { // user
-          switch (e.itemIndex) {
-            case 0: { // stats
-              if (!user) {
-                console.log('No user data available');
-                var cardNoUser = new UI.Card({
-                  title: 'No user data',
-                  body: 'No user data available. Please retry.'
-                });
-                cardNoUser.show();
-              } else {
-                /*console.log('User data available');
-                console.log('Health: ' + Math.round(user.stats.hp));
-                console.log('MaxHealth' + user.stats.maxHealth);
-                console.log('Gold: ' + Math.floor(user.stats.gp));
-                console.log('Level: ' + user.stats.lvl);
-                console.log('Experience: ' + user.stats.exp);
-                console.log('toNextLevel' + user.stats.toNextLevel);
-                console.log('Mana: ' + Math.floor(user.stats.mp));
-                console.log('maxMP' + user.stats.maxMP);*/
-                var cardUserStats = new UI.Card({
-                  title: 'User Stats',
-                  body: 'Health: ' + Math.round(user.stats.hp) + '/' + user.stats.maxHealth + '\n' + 'Experience: ' + user.stats.exp + '/' + user.stats.toNextLevel + ((user.stats.lvl >= 10) ? '\n' + 'Mana: ' + Math.floor(user.stats.mp) + '/' + user.stats.maxMP : '') + '\n' + 'Gold: ' + Math.floor(user.stats.gp) + '\n' + 'Level: ' + user.stats.lvl,
-                  scrollable: true
-                });
-                cardUserStats.show();
-              }
-              break;
-            }
-          }
+					if (!user) {
+						console.log('No user data available');
+						var cardNoUser = new UI.Card({
+							title: 'No user data',
+							body: 'No user data available. Please retry.'
+						});
+						cardNoUser.show();
+          } else {
+						switch (e.itemIndex) {
+							case 0: { // skills
+									menuAllTasks = createTasksMenu('skills');
+									menuAllTasks.show();
+								break;
+							}
+							case 1: { // stats
+									var cardUserStats = new UI.Card({
+										title: 'User Stats',
+										body: 'Health: ' + Math.round(user.stats.hp) + '/' + user.stats.maxHealth + '\n' + 'Experience: ' + user.stats.exp + '/' + user.stats.toNextLevel + ((user.stats.lvl >= 10) ? '\n' + 'Mana: ' + Math.floor(user.stats.mp) + '/' + user.stats.maxMP : '') + '\n' + 'Gold: ' + Math.floor(user.stats.gp) + '\n' + 'Level: ' + user.stats.lvl,
+										scrollable: true
+									});
+									cardUserStats.show();
+								break;
+							}
+					}
           break;
-        }
+        	}
+				}
       }
     }
   });
@@ -180,7 +184,7 @@ function checkHabiticaStatus() {
 
 function createTasksMenu(section) {
   // initialize menu
-  var menu = new UI.Menu({
+  menu = new UI.Menu({
     highlightBackgroundColor: Feature.color('indigo', 'black')
   });
   // initialize sections
@@ -194,6 +198,11 @@ function createTasksMenu(section) {
   };
   var sectionToDos = {
     title: 'To-Dos',
+    items: []
+  };
+	
+	 var sectionSkills = {
+		title: 'Skills - ' + 'hp ' + Math.round(user.stats.hp) + ' mp ' + ((user.stats.lvl >= 10) ? Math.floor(user.stats.mp) + '/' + user.stats.maxMP : ''),
     items: []
   };
   
@@ -226,11 +235,19 @@ function createTasksMenu(section) {
           return x.type == 'todo' && !x.completed;
         }
       ).slice();
+			
+			sectionSkills.items = allTasksPrep.filter(
+        function(x){
+          return x.type == 'skill' && !x.completed;
+        }
+      ).slice();
       
       // put sections into menu
       menu.section(0, sectionHabits);
       menu.section(1, sectionDailies);
       menu.section(2, sectionToDos);
+			menu.section(3, sectionSkills);
+	
     } else {
       //console.log('Section is "' + section + '". Get only these kind of tasks.');
       switch (section) {
@@ -253,7 +270,9 @@ function createTasksMenu(section) {
               return x.type == 'daily' && !x.completed  && ((x.frequency == 'weekly' && x.repeat[habiticaWeekday()]) || (x.frequency == 'daily' & startDate < today && (Math.floor((today - startDate)/(1000*60*60*24)) % x.everyX === 0)));
             }
           ).slice();
+					
           sectionDailies.items = enrichTaskItemsByMenuFields(sectionDailies.items);
+					console.log("sectionDaies items: " + JSON.stringify(sectionDailies.items));
           menu.section(0, sectionDailies);
           break;
         }
@@ -265,6 +284,49 @@ function createTasksMenu(section) {
           ).slice();
           sectionToDos.items = enrichTaskItemsByMenuFields(sectionToDos.items);
           menu.section(0, sectionToDos);
+          break;
+        }
+				case 'skills': {
+					switch (user.stats.class) {
+						case 'warrior': {							
+							sectionSkills.items = [
+								{title:'T Brutal Smash', subtitle:'Tsk +Val, Slf +DMG', spellId:'smash', target:'task', type:'skill'},
+								{title:'S Defensive Stance', subtitle:'Slf +CON', spellId:'defensiveStance', target:'self', type:'skill'},
+								{title:'P Valorous Presence', subtitle:'Prt +STR', spellId:'valorousPresence', target:'party', type:'skill'},
+								{title:'P Intimidating Gaze', subtitle:'Prt +CON',spellId:'intimidate', target:'party', type:'skill'}
+							];
+							break;
+						}	
+						case 'rogue': {
+							sectionSkills.items = [
+								{title:"T Pickpocket", subtitle:"Slf +Gold", spellId:"pickPocket", target:'task', type:'skill'},
+								{title:"T Backstab", subtitle:"Slf +XP, +Gold", spellId:"backStab", target:'task', type:'skill'},
+								{title:"P Tools of the Trade", subtitle:"Prt: +PER", spellId:"toolsOfTrade", target:'party', type:'skill'},
+								{title:"P Stealth", subtitle:"Slf: +Dodge",spellId:"stealth", target:'party', type:'skill'}
+							];
+							break;
+						}
+						case 'healer': {							
+							sectionSkills.items = [
+								{title:'S Healing Light', subtitle:'Slf +HP', spellId:'heal', target:'player', type:'skill'},
+								{title:'P Protective Aura', subtitle:'Prt +CON', spellId:'protectAura', target:'party', type:'skill'},
+								{title:'P Searing Brightness', subtitle:'Tsks +Val', spellId:'brightness', target:'player', type:'skill'},
+								{title:'P Blessing', subtitle:'Prt +HP',spellId:'healAll', target:'party', type:'skill'}
+							];
+							break;
+						}
+						case 'mage': {							
+							sectionSkills.items = [
+								{title:'T Burst of Flames', subtitle:'Slf +XP, +DMG', spellId:'fireball', target:'task', type:'skill'},
+								{title:'P Ethereal Surge', subtitle:'Prt +MP', spellId:'mpHeal', target:'party', type:'skill'},
+								{title:'P Earthquake', subtitle:'Prt +INT', spellId:'earth', target:'party', type:'skill'},
+								{title:'S Chilling Frost', subtitle:'Streaks frozen.',spellId:'frost', target:'player', type:'skill'}
+							];
+							break;
+						}	
+					}
+					
+          menu.section(0, sectionSkills);
           break;
         }
       }
@@ -309,62 +371,82 @@ function createTasksMenu(section) {
   menu.on('select', function(e) {
     //console.log('Selected item #' + e.itemIndex + ' of section #' + e.sectionIndex);
     //console.log('The item is titled "' + e.item.title + '"');
-    if (e.item.down === true) {
-      //console.log('The selected task has .down-item.');
-      if (e.item.up === false) {
-        //console.log('The selected task has no .up-item.');
-        scoreTaskDown(e.item);
-      } else {
-        var selectedTask = e;
-        var cardUpDown = new UI.Card(
-          {
-            'title': e.item.type,
-            'body': e.item.title
-          }
-        );
-        cardUpDown.action({
-          up: 'images/action_icon_plus.png',
-          down: 'images/action_icon_minus.png'
-        });
-        cardUpDown.on('click', 'up', function(e) {
-          //console.log('cardUpDown click up');
-          scoreTaskUp(selectedTask.item);
-          cardUpDown.hide();
-        });
-        cardUpDown.on('click', 'down', function(e) {
-          //console.log('cardUpDown click down');
-          scoreTaskDown(selectedTask.item);
-          cardUpDown.hide();
-        });
-        cardUpDown.show();
-      }
-    } else {
-      //console.log('The selected task has no .down-item.');
-      //console.log('Selected item is:' + JSON.stringify(e.item));
-      if (typeof e.item.checklist !== 'undefined' && e.item.checklist.length > 0) {
-        // access checklist
-        var checklistMenu = new UI.Menu({
-          highlightBackgroundColor: Feature.color('indigo', 'black')
-        });
-        // initialize sections
-        var sectionChecklist = {
-        title: 'Checklist',
-        items: []
-        };
-        sectionChecklist.items = e.item.checklist.slice();
-        sectionChecklist.items = enrichChecklistItemsByMenuFields(sectionChecklist.items, e.item.id);
-        checklistMenu.section(0, sectionChecklist);
-        //console.log(JSON.stringify(sectionChecklist)); // remove
-        checklistMenu.on('select', function(e) {
-          scoreChecklistItem(e.item);
-        });
-        checklistMenu.show();
-        // scoreTaskUp(e.item); //remove when ready
-      } else {
-        // no checklist available -> just score the task
-        scoreTaskUp(e.item); 
-      }
-    }
+		
+		// If we are casting a skill
+		if (e.item.type === 'skill') {
+			if (e.item.target === 'task') { console.log('Trying to cast ' + e.item.title + ', but it requires a target. Dangit!');}
+			else {
+				console.log('Casting ' + e.item.title + '!');
+												
+				menu.status({color: 'white',backgroundColor: 'black'});
+				/*
+				timeout = setTimeout(function() {
+					menu.status({color: 'black',backgroundColor: 'white'});
+					Vibe.vibrate('double');
+				}, 3000);
+				*/
+				
+				castSkill(e.item);
+			}
+			
+		} else {
+			if (e.item.down === true) {
+				//console.log('The selected task has .down-item.');
+				if (e.item.up === false) {
+					//console.log('The selected task has no .up-item.');
+					scoreTaskDown(e.item);
+				} else {
+					var selectedTask = e;
+					var cardUpDown = new UI.Card(
+						{
+							'title': e.item.type,
+							'body': e.item.title
+						}
+					);
+					cardUpDown.action({
+						up: 'images/action_icon_plus.png',
+						down: 'images/action_icon_minus.png'
+					});
+					cardUpDown.on('click', 'up', function(e) {
+						//console.log('cardUpDown click up');
+						scoreTaskUp(selectedTask.item);
+						cardUpDown.hide();
+					});
+					cardUpDown.on('click', 'down', function(e) {
+						//console.log('cardUpDown click down');
+						scoreTaskDown(selectedTask.item);
+						cardUpDown.hide();
+					});
+					cardUpDown.show();
+				}
+			} else {
+				//console.log('The selected task has no .down-item.');
+				//console.log('Selected item is:' + JSON.stringify(e.item));
+				if (typeof e.item.checklist !== 'undefined' && e.item.checklist.length > 0) {
+					// access checklist
+					var checklistMenu = new UI.Menu({
+						highlightBackgroundColor: Feature.color('indigo', 'black')
+					});
+					// initialize sections
+					var sectionChecklist = {
+					title: 'Checklist',
+					items: []
+					};
+					sectionChecklist.items = e.item.checklist.slice();
+					sectionChecklist.items = enrichChecklistItemsByMenuFields(sectionChecklist.items, e.item.id);
+					checklistMenu.section(0, sectionChecklist);
+					//console.log(JSON.stringify(sectionChecklist)); // remove
+					checklistMenu.on('select', function(e) {
+						scoreChecklistItem(e.item);
+					});
+					checklistMenu.show();
+					// scoreTaskUp(e.item); //remove when ready
+				} else {
+					// no checklist available -> just score the task
+					scoreTaskUp(e.item); 
+				}
+			}
+		}
   });
   return menu;
 }
@@ -524,6 +606,50 @@ function scoreTaskDown(task) {
   }
 }
 
+function castSkill(skill) {
+  if (skill) {
+    if (skill.spellId) {
+      ajax(
+        {
+          url: habiticaBaseUrl + habiticaPostSkillCast.replace(':spellId', skill.spellId),
+          method: 'post',
+          type: 'json',
+          headers: {
+            'x-api-user': Settings.option('userId'),
+            'x-api-key': Settings.option('apiToken')
+          }
+        },
+        function(data, status, request) {
+          if (data.success){
+            //console.log('User tasks: ' + JSON.stringify(data));
+						console.log('Casting successfull');
+						
+						clearTimeout(timeout);
+						menu.status({color: 'black',backgroundColor: 'white'});
+						Vibe.vibrate('short');
+						
+            // update users stats
+            user.stats.hp = data.data.hp;
+            user.stats.mp = data.data.mp;
+            user.stats.exp = data.data.exp;
+            user.stats.gp = data.data.gp;
+            user.stats.lvl = data.data.lvl;
+          } else {
+            console.log(data.error + ' - ' + data.message);
+          }
+        },
+        function(error, status, request) {
+          console.log('The ajax request failed: ' + error);
+        }
+      );
+    } else {
+      console.log('SkillID not available.');
+    }
+  } else {
+    console.log('Skill not available.');
+  }
+}
+
 function getUserObject() {
   ajax(
     {
@@ -536,7 +662,7 @@ function getUserObject() {
     },
     function(data, status, request) {
       if (data.success){
-        //console.log('User object: ' + JSON.stringify(data));
+        console.log('User object: ' + JSON.stringify(data));
         user = data.data;
       } else {
         console.log(data.error + ' - ' + data.message);
